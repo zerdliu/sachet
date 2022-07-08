@@ -1,0 +1,15 @@
+language: go
+
+go:
+- "1.15"
+- "1.16"
+- tip
+
+script:
+- go test ./...
+
+deploy:
+- provider: script
+  script: bash build_push_image.sh
+  on:
+   tags: true
