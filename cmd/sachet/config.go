@@ -34,6 +34,7 @@ import (
 	"github.com/messagebird/sachet/provider/textmagic"
 	"github.com/messagebird/sachet/provider/turbosms"
 	"github.com/messagebird/sachet/provider/twilio"
+	"github.com/zerdliu/sachet/provider/huaweicloud"
 )
 
 type ReceiverConf struct {
@@ -75,6 +76,7 @@ var config struct {
 		Ghasedak     ghasedak.Config
 		Sfr          sfr.Config
 		TextMagic    textmagic.Config
+		HuaweiCloud  huaweicloud.Config
 	}
 
 	Receivers []ReceiverConf

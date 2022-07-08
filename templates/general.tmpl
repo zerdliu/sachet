@@ -1,0 +1,8 @@
+{{ define "huaweicloud_sms"}}
+{{ .CommonLabels.severity }}:{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }} {{ .CommonLabels.alertname }} {{ .CommonLabels.instance }} {{ .CommonAnnotations.summary }}
+{{ end }}
+
+
+{{ define "huaweicloud_sms_group_labels"}}
+{{ .CommonLabels.severity }}:{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }} {{ .CommonLabels.alertname }} {{ with .GroupLabels.Remove .CommonLabels.Names }}{{ .Values | join "/"}}{{ end }} {{ .CommonAnnotations.summary }}
+{{ end }}

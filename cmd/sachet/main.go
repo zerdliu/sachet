@@ -42,6 +42,7 @@ import (
 	"github.com/messagebird/sachet/provider/textmagic"
 	"github.com/messagebird/sachet/provider/turbosms"
 	"github.com/messagebird/sachet/provider/twilio"
+	"github.com/zerdliu/sachet/provider/huaweicloud"
 )
 
 var (
@@ -147,6 +148,8 @@ func providerByName(name string) (sachet.Provider, error) {
 		return sfr.NewSfr(config.Providers.Sfr), nil
 	case "textmagic":
 		return textmagic.NewTextMagic(config.Providers.TextMagic), nil
+	case "huaweicloud":
+		return huaweicloud.NewHuaweiCloud(config.Providers.HuaweiCloud), nil
 	}
 
 	return nil, fmt.Errorf("%s: Unknown provider", name)
