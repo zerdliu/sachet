@@ -26,5 +26,6 @@ require github.com/stretchr/testify v1.7.0
 
 require (
 	github.com/messagebird/sachet v0.0.0-20220421143822-05b289fc2620
+	github.com/rs/zerolog v1.27.0
 	github.com/satori/go.uuid v1.2.0
 )

@@ -16,6 +16,9 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 type Config struct {
