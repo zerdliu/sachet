@@ -1,5 +1,5 @@
 {{ define "huaweicloud_sms"}}
-{{ .CommonLabels.severity }}:{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }} {{ .CommonLabels.alertname }} {{ .CommonLabels.instance }} {{ .CommonAnnotations.summary }}
+{{ .CommonLabels.severity }}:{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }} {{ .CommonLabels.alertname }} {{ .CommonLabels.instance }} {{ with index .Alerts 0 }}{{ .StartsAt.Format "2006-01-02 15:04:05" }}{{ end }} {{ .CommonAnnotations.summary }}
 {{ end }}
 
 

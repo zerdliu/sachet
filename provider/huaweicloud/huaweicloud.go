@@ -46,7 +46,7 @@ func NewHuaweiCloud(config Config) *HuaweiCloud {
 	}
 }
 
-func WsseHeader(appKey,appSecret string)string {
+func wsseHeader(appKey,appSecret string)string {
 	const WsseHeaderFormat = `UsernameToken Username="%s",PasswordDigest="%s",Nonce="%s",Created="%s"`
 
 	cTime := time.Now().Format("2006-01-02T15:04:05Z")
@@ -59,27 +59,60 @@ func WsseHeader(appKey,appSecret string)string {
 	return fmt.Sprintf(WsseHeaderFormat, appKey, passwordDigest, nonce, cTime)
 }
 
-func SafeMessage(message sachet.Message) string {
-	const templateVarMaxLength = 20
-	const InvalidCharRegex = `[^\w\d_\-\/=:\[\]\* ]+`
+func substituteInvalidChars(str string) string {
+	const InvalidCharRegex = `[^\p{Han}\w\d_\-\/=:\[\]\* ]+`
 	reg, _ := regexp.Compile(InvalidCharRegex)
+	result := str
 
-	// transformation: alerts -> go template result(txt) -> HuaweiCloud SMS template vars
-	paramsArray := strings.SplitN(strings.TrimSpace(message.Text), " ", 3)
-	for index, param := range paramsArray {
-
-		// substitute IP separator
-		param = strings.ReplaceAll(param, ".", "-")
-		// substitute invalid characters
-		param = reg.ReplaceAllString(param, "@")
-		// cut down string
-		if len(param) > templateVarMaxLength {
-			paramsArray[index] = param[:templateVarMaxLength-3] + "***"
-		} else {
-			paramsArray[index] = param
-		}
+	if !strings.ContainsAny(result, ".<>") {
+		return result
 	}
-	jsonArray, _ := json.Marshal(paramsArray)
+
+	specialCharSub := map[string]string{
+		// IP separator
+		"." : "-",
+		// Huawei SMS not support > & <
+		">=": "ge",
+		"<=": "le",
+		">" : "gt",
+		"<" : "lt",
+	}
+	// substitute special chars
+	for oldChar, newChar := range specialCharSub {
+		result = strings.ReplaceAll(result, oldChar, newChar)
+	}
+
+	// substitute invalid characters
+	result = reg.ReplaceAllString(result, "@")
+	return result
+}
+
+func abbreviateString(str string) string {
+	result := str
+	const templateVarMaxLength = 20
+	// cut down string
+	if len(result) > templateVarMaxLength {
+		result = result[:templateVarMaxLength-3] + "***"
+	} else {
+		result = result
+	}
+	return result
+}
+
+func safeMessage(message sachet.Message) string {
+	// transformation: alerts -> go template result(txt) -> HuaweiCloud SMS template vars
+	paramsArray := strings.SplitN(strings.TrimSpace(message.Text), " ", 6)
+
+	for index, param := range paramsArray {
+		param = substituteInvalidChars(param)
+		param = abbreviateString(param)
+		paramsArray[index] = param
+	}
+
+	// for Huawei SMS template: exchange template var position
+	paramsArray[3], paramsArray[4], paramsArray[5] = paramsArray[5], paramsArray[3], paramsArray[4]
+	// todo: change SMS template
+	jsonArray, _ := json.Marshal(paramsArray[0:5])
 	return string(jsonArray)
 }
 
@@ -97,7 +130,7 @@ func (c *HuaweiCloud) Send(message sachet.Message) error {
 	receivers := strings.Join(message.To,",")
 	statusCallBack := ""
 
-	templateParams := SafeMessage(message)
+	templateParams := safeMessage(message)
 
 	params := url.Values{}
 	params.Add("from", sender)
@@ -111,7 +144,7 @@ func (c *HuaweiCloud) Send(message sachet.Message) error {
 	header := http.Header{}
 	header.Add("Content-Type", "application/x-www-form-urlencoded")
 	header.Add("Authorization", AuthHeaderValue)
-	header.Add("X-WSSE", WsseHeader(appKey, appSecret))
+	header.Add("X-WSSE", wsseHeader(appKey, appSecret))
 
 	req, err := http.NewRequest("POST",apiAddress, bytes.NewBuffer([]byte(body)))
 	req.Header = header
