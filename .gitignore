@@ -30,3 +30,4 @@ config.yaml
 .vscode
 
 cmd/sachet/sachet
+*.log
