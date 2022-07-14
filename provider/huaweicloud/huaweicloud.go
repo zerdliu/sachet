@@ -26,6 +26,8 @@ import (
 )
 
 var (
+	// todo: get provider from config
+	provider = "huaweicloud"
 
 	buckets = []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10}
 	remoteServiceResponseTimeHistogram = prometheus.NewHistogramVec(
@@ -101,8 +103,6 @@ func init() {
 	prometheus.MustRegister(responseTimeHistogram)
 	prometheus.MustRegister(receiveTotal)
 	prometheus.MustRegister(sendTotal)
-
-
 }
 
 func NewHuaweiCloud(config Config) *HuaweiCloud {
@@ -124,7 +124,7 @@ func NewHuaweiCloud(config Config) *HuaweiCloud {
 
 	logger := log.Output(logFile).With().
 		Str("service", "webhook-sms").
-		Str("provider", "huaweicloud-sms").
+		Str("provider", provider).
 		Caller().
 		Logger()
 
@@ -207,8 +207,6 @@ func safeMessage(message sachet.Message) string {
 // Send sends SMS to user registered in configuration.
 func (c *HuaweiCloud) Send(message sachet.Message) error {
 	const AuthHeaderValue = `WSSE realm="SDP",profile="UsernameToken",type="Appkey"`
-	// todo: get provider from config
-	provider := "huaweisms"
 
 	apiAddress := c.Config.Address
 	appKey     := c.Config.Key
@@ -220,6 +218,7 @@ func (c *HuaweiCloud) Send(message sachet.Message) error {
 	receivers := strings.Join(message.To,",")
 	statusCallBack := ""
 
+	// metric & log
 	receiveTotal.WithLabelValues(provider, receivers).Inc()
 	c.Logger.Info().
 		Str("action", "receive").
@@ -265,8 +264,9 @@ func (c *HuaweiCloud) Send(message sachet.Message) error {
 	if err != nil {
 		c.Logger.Err(err).Msg("")
 	}
-	remoteServiceResponseTimeHistogram.WithLabelValues(provider, strconv.Itoa(resp.StatusCode), response.Code).Observe(duration.Seconds())
 
+	// metric & log
+	remoteServiceResponseTimeHistogram.WithLabelValues(provider, strconv.Itoa(resp.StatusCode), response.Code).Observe(duration.Seconds())
 	sendTotal.With(prometheus.Labels{
 		"provider": provider,
 		"receivers":  receivers,
