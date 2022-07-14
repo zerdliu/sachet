@@ -5,6 +5,9 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
+	"github.com/rs/zerolog/log"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -12,13 +15,12 @@ import (
 	"fmt"
 	"github.com/messagebird/sachet"
 	uuid "github.com/satori/go.uuid"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog/pkgerrors"
 )
 
 type Config struct {
@@ -30,22 +32,56 @@ type Config struct {
 	Sign       string `yaml:"sign"`
 }
 
+type Response struct {
+	Code string `json:"code"`
+	Description string `json:"description"`
+	Result []ResponseDetail `json:"result"`
+}
+
+type ResponseDetail struct {
+	OriginTo string `json:"originTo"`
+	CreateTime string `json:"createTime"`
+	From string `json:"from"`
+	SmsMsgId string `json:"smsMsgId"`
+	Status string `json:"status"`
+
+}
+
 var _ (sachet.Provider) = (*HuaweiCloud)(nil)
 
 type HuaweiCloud struct {
 	Config
 	httpClient *http.Client
+	zerolog.Logger
 }
 
 func NewHuaweiCloud(config Config) *HuaweiCloud {
+	programName := filepath.Base(os.Args[0])
+
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	client := &http.Client{Transport: tr}
 
+	logFile, err := os.OpenFile(programName + ".log", os.O_RDWR | os.O_CREATE | os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatal().Msgf("Can't open file: %v", err)
+	}
+	//defer logFile.Close()
+
+	zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+
+	logger := log.Output(logFile).With().
+		Str("service", "webhook-sms").
+		Str("provider", "huaweicloud-sms").
+		Caller().
+		Logger()
+
 	return &HuaweiCloud{
 		config,
 		client,
+		logger,
 	}
 }
 
@@ -96,8 +132,6 @@ func abbreviateString(str string) string {
 	// cut down string
 	if len(result) > templateVarMaxLength {
 		result = result[:templateVarMaxLength-3] + "***"
-	} else {
-		result = result
 	}
 	return result
 }
@@ -116,6 +150,7 @@ func safeMessage(message sachet.Message) string {
 	paramsArray[3], paramsArray[4], paramsArray[5] = paramsArray[5], paramsArray[3], paramsArray[4]
 	// todo: change SMS template
 	jsonArray, _ := json.Marshal(paramsArray[0:5])
+	//jsonArray, _ := json.Marshal(paramsArray)
 	return string(jsonArray)
 }
 
@@ -132,6 +167,13 @@ func (c *HuaweiCloud) Send(message sachet.Message) error {
 
 	receivers := strings.Join(message.To,",")
 	statusCallBack := ""
+
+	c.Logger.Info().
+		Str("action", "receive").
+		Str("receivers", strings.Join(message.To,",")).
+		Str("from", message.From).
+		Str("type", message.Type).
+		Msg(message.Text)
 
 	templateParams := safeMessage(message)
 
@@ -154,19 +196,28 @@ func (c *HuaweiCloud) Send(message sachet.Message) error {
 
 	resp, err := c.httpClient.Do(req)
 	defer resp.Body.Close()
-
-	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		c.Logger.Err(err)
 	}
 
-	result := map[string]string{}
-	_ = json.Unmarshal(b, &result)
-
-	if result["description"] == "Success" {
-		fmt.Println("OK")
+	var response Response
+	err = json.NewDecoder(resp.Body).Decode(&response)
+	if err != nil {
+		c.Logger.Err(err).Msg("")
 	}
-	fmt.Println(result)
-	fmt.Errorf("code:%s message:%s", result["code"], result["description"])
+
+	detail, err := json.Marshal(response.Result)
+	if err != nil {
+		c.Logger.Err(err).Msg("")
+	}
+
+	c.Logger.Info().
+		Str("action", "send").
+		Str("receivers", strings.Join(message.To,",")).
+		Int("http_code", resp.StatusCode).
+		Str("error_code", response.Code).
+		Str("error_description", response.Description).
+		Msg(string(detail))
+
 	return err
 }
