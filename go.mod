@@ -28,4 +28,5 @@ require (
 	github.com/messagebird/sachet v0.0.0-20220421143822-05b289fc2620
 	github.com/rs/zerolog v1.27.0
 	github.com/satori/go.uuid v1.2.0
+	golang.org/x/sys v0.0.0-20220712014510-0a85c31ab51e // indirect
 )
