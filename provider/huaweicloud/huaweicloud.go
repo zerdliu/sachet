@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"encoding/json"
 	"fmt"
@@ -63,6 +64,14 @@ var (
 		},
 		[]string{"provider", "receivers", "http_code", "error_code"},
 	)
+
+	messageTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "sachet_message_total",
+			Help: "The message total number.",
+		},
+		[]string{"provider", "receiver", "http_code", "error_code"},
+	)
 )
 
 
@@ -103,6 +112,7 @@ func init() {
 	prometheus.MustRegister(responseTimeHistogram)
 	prometheus.MustRegister(receiveTotal)
 	prometheus.MustRegister(sendTotal)
+	prometheus.MustRegister(messageTotal)
 }
 
 func NewHuaweiCloud(config Config) *HuaweiCloud {
@@ -275,12 +285,17 @@ func (c *HuaweiCloud) Send(message sachet.Message) error {
 	}).Inc()
 	duration = time.Since(start)
 	responseTimeHistogram.WithLabelValues(provider, strconv.Itoa(resp.StatusCode)).Observe(duration.Seconds())
+	for _, receiver := range message.To {
+		messageTotal.WithLabelValues(provider, receiver, strconv.Itoa(resp.StatusCode), response.Code).Inc()
+	}
 	c.Logger.Info().
 		Str("action", "send").
 		Str("receivers", strings.Join(message.To,",")).
 		Int("http_code", resp.StatusCode).
 		Str("error_code", response.Code).
 		Str("error_description", response.Description).
+		Int("message_count", len(response.Result)).
+		Int("message_var_length", utf8.RuneCountInString(templateParams)).
 		Msg(string(detail))
 
 	return err
