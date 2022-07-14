@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"encoding/json"
@@ -22,6 +24,45 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/pkgerrors"
 )
+
+var (
+
+	buckets = []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10}
+	remoteServiceResponseTimeHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "sachet_remote_service_request_duration_seconds",
+			Help: "Histogram of response time for remote service in seconds.",
+			Buckets: buckets,
+		},
+		[]string{"provider", "http_code", "error_code"},
+	)
+
+	responseTimeHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "sachet_request_duration_seconds",
+			Help: "Histogram of response time for sachet in seconds.",
+			Buckets: buckets,
+		},
+		[]string{"provider", "http_code"},
+	)
+
+	receiveTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "sachet_receive_request_total",
+			Help: "The received requests total number.",
+		},
+		[]string{"provider", "receivers"},
+	)
+
+	sendTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "sachet_send_request_total",
+			Help: "The send requests total number.",
+		},
+		[]string{"provider", "receivers", "http_code", "error_code"},
+	)
+)
+
 
 type Config struct {
 	Address    string `yaml:"api_address"`
@@ -55,19 +96,28 @@ type HuaweiCloud struct {
 	zerolog.Logger
 }
 
+func init() {
+	prometheus.MustRegister(remoteServiceResponseTimeHistogram)
+	prometheus.MustRegister(responseTimeHistogram)
+	prometheus.MustRegister(receiveTotal)
+	prometheus.MustRegister(sendTotal)
+
+
+}
+
 func NewHuaweiCloud(config Config) *HuaweiCloud {
 	programName := filepath.Base(os.Args[0])
+	logFile, err := os.OpenFile(programName + ".log", os.O_RDWR | os.O_CREATE | os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatal().Msgf("Can't open file: %v", err)
+	}
+	// todo: graceful close logfile
+	//defer logFile.Close()
 
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	client := &http.Client{Transport: tr}
-
-	logFile, err := os.OpenFile(programName + ".log", os.O_RDWR | os.O_CREATE | os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatal().Msgf("Can't open file: %v", err)
-	}
-	//defer logFile.Close()
 
 	zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
@@ -157,6 +207,8 @@ func safeMessage(message sachet.Message) string {
 // Send sends SMS to user registered in configuration.
 func (c *HuaweiCloud) Send(message sachet.Message) error {
 	const AuthHeaderValue = `WSSE realm="SDP",profile="UsernameToken",type="Appkey"`
+	// todo: get provider from config
+	provider := "huaweisms"
 
 	apiAddress := c.Config.Address
 	appKey     := c.Config.Key
@@ -168,9 +220,10 @@ func (c *HuaweiCloud) Send(message sachet.Message) error {
 	receivers := strings.Join(message.To,",")
 	statusCallBack := ""
 
+	receiveTotal.WithLabelValues(provider, receivers).Inc()
 	c.Logger.Info().
 		Str("action", "receive").
-		Str("receivers", strings.Join(message.To,",")).
+		Str("receivers", receivers).
 		Str("from", message.From).
 		Str("type", message.Type).
 		Msg(message.Text)
@@ -194,8 +247,10 @@ func (c *HuaweiCloud) Send(message sachet.Message) error {
 	req, err := http.NewRequest("POST",apiAddress, bytes.NewBuffer([]byte(body)))
 	req.Header = header
 
+	start := time.Now()
 	resp, err := c.httpClient.Do(req)
 	defer resp.Body.Close()
+	duration := time.Since(start)
 	if err != nil {
 		c.Logger.Err(err)
 	}
@@ -210,7 +265,16 @@ func (c *HuaweiCloud) Send(message sachet.Message) error {
 	if err != nil {
 		c.Logger.Err(err).Msg("")
 	}
+	remoteServiceResponseTimeHistogram.WithLabelValues(provider, strconv.Itoa(resp.StatusCode), response.Code).Observe(duration.Seconds())
 
+	sendTotal.With(prometheus.Labels{
+		"provider": provider,
+		"receivers":  receivers,
+		"http_code": strconv.Itoa(resp.StatusCode),
+		"error_code": response.Code,
+	}).Inc()
+	duration = time.Since(start)
+	responseTimeHistogram.WithLabelValues(provider, strconv.Itoa(resp.StatusCode)).Observe(duration.Seconds())
 	c.Logger.Info().
 		Str("action", "send").
 		Str("receivers", strings.Join(message.To,",")).
