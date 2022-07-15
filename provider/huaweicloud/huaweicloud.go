@@ -208,9 +208,7 @@ func safeMessage(message sachet.Message) string {
 
 	// for Huawei SMS template: exchange template var position
 	paramsArray[3], paramsArray[4], paramsArray[5] = paramsArray[5], paramsArray[3], paramsArray[4]
-	// todo: change SMS template
-	jsonArray, _ := json.Marshal(paramsArray[0:5])
-	//jsonArray, _ := json.Marshal(paramsArray)
+	jsonArray, _ := json.Marshal(paramsArray)
 	return string(jsonArray)
 }
 
