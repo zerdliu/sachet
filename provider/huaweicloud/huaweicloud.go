@@ -8,7 +8,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -116,11 +115,11 @@ func init() {
 }
 
 func NewHuaweiCloud(config Config) *HuaweiCloud {
-	programName := filepath.Base(os.Args[0])
-	logFile, err := os.OpenFile(programName + ".log", os.O_RDWR | os.O_CREATE | os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatal().Msgf("Can't open file: %v", err)
-	}
+	//programName := filepath.Base(os.Args[0])
+	//logFile, err := os.OpenFile(programName + ".log", os.O_RDWR | os.O_CREATE | os.O_APPEND, 0666)
+	//if err != nil {
+	//	log.Fatal().Msgf("Can't open file: %v", err)
+	//}
 	// todo: graceful close logfile
 	//defer logFile.Close()
 
@@ -132,7 +131,7 @@ func NewHuaweiCloud(config Config) *HuaweiCloud {
 	zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
-	logger := log.Output(logFile).With().
+	logger := log.Output(os.Stdout).With().
 		Str("service", "webhook-sms").
 		Str("provider", provider).
 		Caller().
