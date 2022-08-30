@@ -227,7 +227,9 @@ func (c *HuaweiCloud) Send(message sachet.Message) error {
 	statusCallBack := ""
 
 	// metric & log
-	receiveTotal.WithLabelValues(provider, receivers).Inc()
+	receiveTotal.
+		WithLabelValues(provider, receivers).
+		Inc()
 	c.Logger.Info().
 		Str("action", "receive").
 		Str("receivers", receivers).
@@ -274,7 +276,10 @@ func (c *HuaweiCloud) Send(message sachet.Message) error {
 	}
 
 	// metric & log
-	remoteServiceResponseTimeHistogram.WithLabelValues(provider, strconv.Itoa(resp.StatusCode), response.Code).Observe(duration.Seconds())
+	remoteServiceResponseTimeHistogram.
+		WithLabelValues(provider, strconv.Itoa(resp.StatusCode), response.Code).
+		Observe(duration.Seconds())
+
 	sendTotal.With(prometheus.Labels{
 		"provider": provider,
 		"receivers":  receivers,
@@ -282,9 +287,14 @@ func (c *HuaweiCloud) Send(message sachet.Message) error {
 		"error_code": response.Code,
 	}).Inc()
 	duration = time.Since(start)
-	responseTimeHistogram.WithLabelValues(provider, strconv.Itoa(resp.StatusCode)).Observe(duration.Seconds())
+	responseTimeHistogram.
+		WithLabelValues(provider, strconv.Itoa(resp.StatusCode)).
+		Observe(duration.Seconds())
+
 	for _, receiver := range message.To {
-		messageTotal.WithLabelValues(provider, receiver, strconv.Itoa(resp.StatusCode), response.Code).Inc()
+		messageTotal.
+			WithLabelValues(provider, receiver, strconv.Itoa(resp.StatusCode), response.Code).
+			Inc()
 	}
 	c.Logger.Info().
 		Str("action", "send").
